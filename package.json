@@ -1,0 +1,13 @@
+{
+  "name": "3d-model-platform-root",
+  "version": "1.0.0",
+  "description": "Root package for 3D model sharing platform",
+  "private": true,
+  "scripts": {
+    "install-all": "npm install && npm install --prefix backend && npm install --prefix frontend",
+    "dev": "concurrently \"npm run start --prefix backend\" \"npm run dev --prefix frontend\""
+  },
+  "dependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
