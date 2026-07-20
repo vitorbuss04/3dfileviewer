@@ -411,8 +411,8 @@ export default function App() {
         <AdminPanel 
           folders={folders}
           onClose={() => setShowUploadModal(false)}
-          onUploadSuccess={(newModel) => {
-            setModels([newModel, ...models]);
+          onUploadSuccess={async () => {
+            await fetchModels();
             setShowUploadModal(false);
           }}
         />
