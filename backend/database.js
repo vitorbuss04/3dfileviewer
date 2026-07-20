@@ -60,6 +60,11 @@ async function createTables() {
     await run(createModelsTableSql);
     console.log('Models table verified/created.');
     
+    // Performance indexes
+    await run('CREATE INDEX IF NOT EXISTS idx_models_folder ON models(folder);');
+    await run('CREATE INDEX IF NOT EXISTS idx_models_upload_date ON models(upload_date DESC);');
+    console.log('Performance indexes verified/created.');
+    
     // Self-healing migration for existing databases
     try {
       await run('ALTER TABLE models ADD COLUMN imagepath TEXT;');

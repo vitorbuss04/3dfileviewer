@@ -1,9 +1,9 @@
 const path = require('path');
 const fs = require('fs');
-const dbServices = require('./database');
+const dbServices = require('../backend/database');
 
 const sourceDir = `c:\\Users\\augus\\Downloads\\drive-download-20260720T122600Z-1-002`;
-const uploadsDir = path.join(__dirname, 'uploads');
+const uploadsDir = path.join(__dirname, '..', 'backend', 'uploads');
 
 // Ensure uploads folder exists
 if (!fs.existsSync(uploadsDir)) {

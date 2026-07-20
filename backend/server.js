@@ -17,8 +17,11 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Serve uploads folder statically
-app.use('/api/uploads', express.static(uploadsDir));
+// Serve uploads folder statically with cache headers for improved performance
+app.use('/api/uploads', express.static(uploadsDir, {
+  maxAge: '1y',
+  immutable: true
+}));
 
 // Multer storage configuration
 const storage = multer.diskStorage({

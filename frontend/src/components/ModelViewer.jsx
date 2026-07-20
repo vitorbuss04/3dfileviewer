@@ -4,6 +4,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import { ThreeMFLoader } from 'three/examples/jsm/loaders/3MFLoader.js';
 import { X, Info, RotateCcw, Sun } from 'lucide-react';
+import STLParserWorker from '../workers/stlParser.worker.js?worker';
 
 export default function ModelViewer({ model, onClose }) {
   const containerRef = useRef(null);
@@ -19,6 +20,8 @@ export default function ModelViewer({ model, onClose }) {
   const rendererRef = useRef(null);
   const animationFrameIdRef = useRef(null);
   const currentMeshRef = useRef(null);
+  const xhrRef = useRef(null);
+  const workerRef = useRef(null);
 
   // References for dynamic light updating
   const ambientLightRef = useRef(null);
@@ -134,10 +137,56 @@ export default function ModelViewer({ model, onClose }) {
     };
 
     if (isStl) {
-      const loader = new STLLoader(manager);
-      loader.load(
-        fileUrl,
-        (geometry) => {
+      // 1. Fetch file as arrayBuffer with progress tracking
+      const xhr = new XMLHttpRequest();
+      xhrRef.current = xhr;
+      xhr.open('GET', fileUrl, true);
+      xhr.responseType = 'arraybuffer';
+      
+      xhr.onprogress = (event) => {
+        if (event.lengthComputable && event.total > 0) {
+          setProgress(Math.round((event.loaded / event.total) * 100));
+        }
+      };
+      
+      xhr.onload = () => {
+        if (xhr.status !== 200) {
+          setError(`Erro ao carregar arquivo: Status ${xhr.status}`);
+          setLoading(false);
+          return;
+        }
+        
+        const arrayBuffer = xhr.response;
+        
+        // 2. Offload parsing to Web Worker
+        const worker = new STLParserWorker();
+        workerRef.current = worker;
+        worker.postMessage({ arrayBuffer }, [arrayBuffer]);
+        
+        worker.onmessage = (e) => {
+          const { success, positions, normals, error: parseError } = e.data;
+          
+          // Terminate worker immediately after use
+          worker.terminate();
+          workerRef.current = null;
+          
+          if (!success) {
+            console.error('Error parsing STL inside worker:', parseError);
+            setError('Falha ao processar o arquivo STL no Web Worker.');
+            setLoading(false);
+            return;
+          }
+          
+          // Reconstruct geometry on main thread
+          const geometry = new THREE.BufferGeometry();
+          geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+          
+          if (normals) {
+            geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+          } else {
+            geometry.computeVertexNormals();
+          }
+          
           const material = new THREE.MeshStandardMaterial({
             color: new THREE.Color(modelColor), // Initialize with current color state
             roughness: 0.4,
@@ -152,18 +201,23 @@ export default function ModelViewer({ model, onClose }) {
           const group = new THREE.Group();
           group.add(mesh);
           handleModelLoaded(group);
-        },
-        (xhr) => {
-          if (xhr.lengthComputable && xhr.total > 0) {
-            setProgress(Math.round((xhr.loaded / xhr.total) * 100));
-          }
-        },
-        (err) => {
-          console.error('Error loading STL:', err);
-          setError('Falha ao processar o arquivo STL. Certifique-se de que o arquivo não está corrompido.');
+        };
+        
+        worker.onerror = (err) => {
+          worker.terminate();
+          workerRef.current = null;
+          console.error('Web Worker error:', err);
+          setError('Erro de execução no Web Worker.');
           setLoading(false);
-        }
-      );
+        };
+      };
+      
+      xhr.onerror = () => {
+        setError('Falha de conexão ao baixar o arquivo.');
+        setLoading(false);
+      };
+      
+      xhr.send();
     } else {
       // 3MF Loading
       const loader = new ThreeMFLoader(manager);
@@ -221,6 +275,12 @@ export default function ModelViewer({ model, onClose }) {
     // Clean up
     return () => {
       window.removeEventListener('resize', handleResize);
+      if (xhrRef.current) {
+        xhrRef.current.abort();
+      }
+      if (workerRef.current) {
+        workerRef.current.terminate();
+      }
       if (animationFrameIdRef.current) {
         cancelAnimationFrame(animationFrameIdRef.current);
       }
